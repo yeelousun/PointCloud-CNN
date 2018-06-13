@@ -68,7 +68,7 @@ def get_model(point_cloud, point_cloud_kernel,point_cloud_all, is_training = Tru
     ##net2
     net2_x = tf.slice(net2_2, [0, 0, 0, 0], [-1, -1,-1, 63])
     net2_y = tf.slice(net2_2, [0, 0, 0, 63], [-1, -1,-1, 1])
-    for y_num in range (128): 
+    for y_num in range (256): 
         if y_num == 0:
             net2_y_num = net2_y
         else :      
@@ -92,7 +92,7 @@ def get_model(point_cloud, point_cloud_kernel,point_cloud_all, is_training = Tru
     ##net3
     net3_x = tf.slice(net2_f, [0, 0, 0, 0], [-1, -1,-1, 255])
     net3_y = tf.slice(net2_f, [0, 0, 0, 255], [-1, -1,-1, 1])
-    for y_num in range (128): 
+    for y_num in range (256): 
         if y_num == 0:
             net3_y_num = net3_y
         else :      
