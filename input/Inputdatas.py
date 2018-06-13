@@ -97,6 +97,7 @@ def point_group_first(idx_data,data,PGK,PGN):
     
     pg_data = np.zeros([batch_size,PGK,PGN,data_feature_num])
     pg_data_idx = np.zeros([batch_size,PGK,3])
+    pg_data_all = np.zeros([batch_size,PGK,3])
     for point_idx in range (batch_size):
         rerowcol=idx_data[point_idx]
         real_data = data[point_idx]
@@ -110,8 +111,9 @@ def point_group_first(idx_data,data,PGK,PGN):
             pgr[n]=pointgroup_svd(real_data[pgi[n,:],:])
         pg_data[point_idx] = pgr
         pg_data_idx[point_idx] = rerowcol_downsample
+        pg_data_all[point_idx] = pointgroup_svd(rerowcol_downsample)
         
-    return pg_data, pg_data_idx
+    return pg_data, pg_data_idx,pg_data_all
 
 def pointgroup_svd (pointgroup):
     scaler = preprocessing.StandardScaler().fit(pointgroup)

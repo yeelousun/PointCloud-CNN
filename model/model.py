@@ -23,10 +23,11 @@ from math import sqrt
 def placeholder_inputs(batch_size, numkernel, pgnump):
     pointclouds_pl = tf.placeholder(tf.float32, shape=(batch_size, numkernel,pgnump, 3))
     pointclouds_kernel = tf.placeholder(tf.float32, shape=(batch_size, numkernel, 3))
+    pointclouds_all = tf.placeholder(tf.float32, shape=(batch_size, numkernel, 3))
     labels_pl = tf.placeholder(tf.int32, shape=(batch_size))
-    return pointclouds_pl, pointclouds_kernel, labels_pl
+    return pointclouds_pl, pointclouds_kernel, pointclouds_all, labels_pl
 
-def get_model(point_cloud, point_cloud_kernel, is_training = True, bn_decay=None):
+def get_model(point_cloud, point_cloud_kernel,point_cloud_all, is_training = True, bn_decay=None):
     """ Classification PointNet, input is BxPGKxPGNx3, output Bx40 """
     # if is_training == True:
     #     dropout_prob_conv = 0.1
@@ -34,7 +35,7 @@ def get_model(point_cloud, point_cloud_kernel, is_training = True, bn_decay=None
     # else:
     #     dropout_prob_conv = 0.0
     #     dropout_prob_f = 0.0
-        
+       
 
     batch_size = point_cloud.get_shape()[0].value
     PGK = point_cloud.get_shape()[1].value
@@ -48,21 +49,21 @@ def get_model(point_cloud, point_cloud_kernel, is_training = True, bn_decay=None
         else :      
             net1_y_num = tf.concat([net1_y_num,net1_y],axis=3)
 
-    net1 = conv2d("conv1_1", input=net1_x, activation=selu, ksize=1, f_in=2, f_out=64)
-    net1 = conv2d("conv1_2", input=net1, activation=selu, ksize=1, f_in=64, f_out=64)
+    net1 = conv2d("conv1_1", input=net1_x, activation=selu, ksize=1, f_in=2, f_out=128)
+    net1 = conv2d("conv1_2", input=net1, activation=selu, ksize=1, f_in=128, f_out=64)
     #norm
     net1_norm = tf.sqrt(tf.reduce_sum(tf.square(net1), axis=2))  
     net1_y_norm = tf.sqrt(tf.reduce_sum(tf.square(net1_y_num), axis=2))  
     #cos
     net1cos = tf.reduce_sum(tf.multiply(net1, net1_y_num), axis=2)  
     net1cos_norm = net1cos / (net1_norm * net1_y_norm)  
-
+    net1cos_norm = selu(net1cos_norm)
     #feature1 
-    Feature1 = tf.reduce_sum(net1cos_norm, 1, keep_dims=False)
+    Feature1 = tf.reduce_mean(net1cos_norm, 1, keep_dims=False)
     Feature1 = tf.reshape(Feature1, [batch_size, -1])
     
     net1_f = tf.reshape(net1cos_norm, [batch_size, PGK, -1])
-    net2_2, net_idx2 = point_group(point_cloud_kernel,net1_f,128,PGN)
+    net2_2, net_idx2 = point_group("group1", point_cloud_kernel,net1_f,32,PGN)
     
     ##net2
     net2_x = tf.slice(net2_2, [0, 0, 0, 0], [-1, -1,-1, 63])
@@ -73,67 +74,44 @@ def get_model(point_cloud, point_cloud_kernel, is_training = True, bn_decay=None
         else :      
             net2_y_num = tf.concat([net2_y_num,net2_y],axis=3)
 
-    net2 = conv2d("conv2_1", input=net2_x, activation=selu, ksize=1, f_in=63, f_out=128)
-    net2 = conv2d("conv2_2", input=net2, activation=selu, ksize=1, f_in=128, f_out=128)
+    net2 = conv2d("conv2_1", input=net2_x, activation=selu, ksize=1, f_in=63, f_out=512)
+    net2 = conv2d("conv2_2", input=net2, activation=selu, ksize=1, f_in=512, f_out=256)
     #norm
     net2_norm = tf.sqrt(tf.reduce_sum(tf.square(net2), axis=2))  
     net2_y_norm = tf.sqrt(tf.reduce_sum(tf.square(net2_y_num), axis=2))  
     #cos
     net2cos = tf.reduce_sum(tf.multiply(net2, net2_y_num), axis=2)  
     net2cos_norm = net2cos / (net2_norm * net2_y_norm)  
-
+    net2cos_norm = selu(net2cos_norm)
     #feature2 
-    Feature2 = tf.reduce_sum(net2cos_norm, 1, keep_dims=False)
-    Feature2 = tf.reshape(Feature2, [batch_size, -1])
+    Feature2 = tf.reduce_mean(net2cos_norm, 1, keep_dims=False)
+    Feature2 = tf.reshape(Feature2, [batch_size, -1])   
     
-    net2_f = tf.reshape(net2cos_norm, [batch_size, 128, -1])
-    net3_3, _ = point_group(net_idx2,net2_f,32,PGN)
-
+    net2_f = tf.reshape(net2cos_norm, [batch_size, 1, 32, -1])
+    
     ##net3
-    net3_x = tf.slice(net3_3, [0, 0, 0, 0], [-1, -1,-1, 127])
-    net3_y = tf.slice(net3_3, [0, 0, 0, 127], [-1, -1,-1, 1])
+    net3_x = tf.slice(net2_f, [0, 0, 0, 0], [-1, -1,-1, 255])
+    net3_y = tf.slice(net2_f, [0, 0, 0, 255], [-1, -1,-1, 1])
     for y_num in range (128): 
         if y_num == 0:
             net3_y_num = net3_y
         else :      
             net3_y_num = tf.concat([net3_y_num,net3_y],axis=3)
-    
-    net3 = conv2d("conv3_1", input=net3_x, activation=selu, ksize=1, f_in=127, f_out=128)
-    net3 = conv2d("conv3_2", input=net3, activation=selu, ksize=1, f_in=128, f_out=128)
+
+    net3 = conv2d("conv3_1", input=net3_x, activation=selu, ksize=1, f_in=255, f_out=512)
+    net3 = conv2d("conv3_2", input=net3, activation=selu, ksize=1, f_in=512, f_out=256)
     #norm
     net3_norm = tf.sqrt(tf.reduce_sum(tf.square(net3), axis=2))  
     net3_y_norm = tf.sqrt(tf.reduce_sum(tf.square(net3_y_num), axis=2))  
     #cos
     net3cos = tf.reduce_sum(tf.multiply(net3, net3_y_num), axis=2)  
     net3cos_norm = net3cos / (net3_norm * net3_y_norm)
+    net3cos_norm = selu(net3cos_norm)
     #feature3
-    Feature3 = tf.reduce_sum(net3cos_norm, 1, keep_dims=False)
+    Feature3 = tf.reduce_mean(net3cos_norm, 1, keep_dims=False)
     Feature3 = tf.reshape(Feature3, [batch_size, -1])
-    
-    net3_f = tf.reshape(net3cos_norm, [batch_size, 1, 32, -1])
-    
-    ##net4
-    net4_x = tf.slice(net3_f, [0, 0, 0, 0], [-1, -1,-1, 127])
-    net4_y = tf.slice(net3_f, [0, 0, 0, 127], [-1, -1,-1, 1])
-    for y_num in range (128): 
-        if y_num == 0:
-            net4_y_num = net4_y
-        else :      
-            net4_y_num = tf.concat([net4_y_num,net4_y],axis=3)
 
-    net4 = conv2d("conv4_1", input=net4_x, activation=selu, ksize=1, f_in=127, f_out=128)
-    net4 = conv2d("conv4_2", input=net4, activation=selu, ksize=1, f_in=128, f_out=128)
-    #norm
-    net4_norm = tf.sqrt(tf.reduce_sum(tf.square(net4), axis=2))  
-    net4_y_norm = tf.sqrt(tf.reduce_sum(tf.square(net4_y_num), axis=2))  
-    #cos
-    net4cos = tf.reduce_sum(tf.multiply(net4, net4_y_num), axis=2)  
-    net4cos_norm = net4cos / (net4_norm * net4_y_norm)
-    #feature4
-    Feature4 = tf.reduce_sum(net4cos_norm, 1, keep_dims=False)
-    Feature4 = tf.reshape(Feature4, [batch_size, -1])
-
-    net = tf.concat([Feature1,Feature2,Feature3,Feature4],axis=1)
+    net = tf.concat([Feature1,Feature2,Feature3],axis=1)
     dim = net.get_shape()[1].value
 
     net = fc('fully_connected1', input=net, activation=selu, n_in=dim, n_out=256, stddev=0.04, bias_init=0.1,
@@ -157,29 +135,30 @@ def get_loss(pred, label):
     tf.summary.scalar('classify loss', classify_loss)
     return classify_loss
 
-def point_group(idx_data,data,PGK,PGN):
-    batch_size = data.get_shape()[0].value
-    data_feature_num =data.get_shape()[-1].value
-    pg_data=[]
-    pg_data_idx=[]
-    for point_idx in range (batch_size):
-        rerowcol= idx_data[point_idx]
-        real_data = data[point_idx]
-        KernelList=random.sample(range(rerowcol.shape[0]),PGK)
-        #rerowcol_downsample is downsample point
-        rerowcol_downsample=tf.gather(rerowcol,KernelList)
-        downdata = tf.expand_dims(rerowcol_downsample,1)
-        dis = tf.reduce_sum(tf.abs(tf.subtract(rerowcol,downdata)),reduction_indices=2) 
-        _, pg_idx = tf.nn.top_k(tf.negative(dis),k = PGN )
-        pgr = tf.gather(real_data,pg_idx)
-        pgr = tf.expand_dims(pgr,0)
-        rerowcol_downsample = tf.expand_dims(rerowcol_downsample,0)
-        if point_idx == 0:
-            pg_data = pgr
-            pg_data_idx = rerowcol_downsample
-        else :
-            pg_data = tf.concat([pg_data,pgr],axis=0)
-            pg_data_idx = tf.concat([pg_data_idx,rerowcol_downsample],axis=0)
+def point_group(scope_name,idx_data,data,PGK,PGN):
+    with tf.variable_scope(scope_name) as scope:
+        batch_size = data.get_shape()[0].value
+        data_feature_num =data.get_shape()[-1].value
+        pg_data=[]
+        pg_data_idx=[]
+        for point_idx in range (batch_size):
+            rerowcol= idx_data[point_idx]
+            real_data = data[point_idx]
+            KernelList=random.sample(range(rerowcol.shape[0]),PGK)
+            #rerowcol_downsample is downsample point
+            rerowcol_downsample=tf.gather(rerowcol,KernelList)
+            downdata = tf.expand_dims(rerowcol_downsample,1)
+            dis = tf.reduce_sum(tf.abs(tf.subtract(rerowcol,downdata)),reduction_indices=2) 
+            _, pg_idx = tf.nn.top_k(tf.negative(dis),k = PGN )
+            pgr = tf.gather(real_data,pg_idx)
+            pgr = tf.expand_dims(pgr,0)
+            rerowcol_downsample = tf.expand_dims(rerowcol_downsample,0)
+            if point_idx == 0:
+                pg_data = pgr
+                pg_data_idx = rerowcol_downsample
+            else :
+                pg_data = tf.concat([pg_data,pgr],axis=0)
+                pg_data_idx = tf.concat([pg_data_idx,rerowcol_downsample],axis=0)
 
     return pg_data, pg_data_idx
 

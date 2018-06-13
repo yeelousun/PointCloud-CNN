@@ -24,7 +24,7 @@ LOG_FOUT = open(os.path.join(LOG_DIR, 'log_train.txt'), 'w')
 NUM_CLASSES = 40
 NUM_POINT  = 2048
 BATCH_SIZE = 32
-numkernel  = 512
+numkernel  = 256
 pgnump     = 32
 
 MAX_EPOCH  = 500
@@ -71,7 +71,7 @@ def variable_summaries(var, name="layer"):
 def train():
     with tf.Graph().as_default():
         with tf.device('/cpu:0'):
-            pointclouds_pl, pointclouds_kernel, labels_pl = placeholder_inputs(BATCH_SIZE, numkernel, pgnump)    
+            pointclouds_pl, pointclouds_kernel, pointclouds_all ,labels_pl = placeholder_inputs(BATCH_SIZE, numkernel, pgnump)    
             is_training_pl = tf.placeholder(tf.bool, shape=())
             print(is_training_pl)
             # Note the global_step=batch parameter to minimize. 
@@ -79,7 +79,7 @@ def train():
             batch = tf.Variable(0)
             
             # Get model and loss 
-            pred = get_model(pointclouds_pl, pointclouds_kernel, is_training_pl)
+            pred = get_model(pointclouds_pl, pointclouds_kernel, pointclouds_all, is_training_pl)
             loss = get_loss(pred, labels_pl)
             tf.summary.scalar('loss', loss)
 
@@ -132,6 +132,7 @@ def train():
 
         ops = {'pointclouds_pl': pointclouds_pl,
                'pointclouds_kernel':pointclouds_kernel,
+               'pointclouds_all':pointclouds_all,
                'labels_pl': labels_pl,
                'is_training_pl': is_training_pl,
                'pred': pred,
@@ -186,7 +187,7 @@ def train_one_epoch(sess, ops, train_writer):
             train_data_r  = rotate_point_cloud(current_data[start_idx:end_idx, :, :])
             train_data_rt  = rotate_point_cloud(train_data_r)
             train_label = current_label[start_idx:end_idx]
-            train_data, idx_data = point_group_first(train_data_rt,train_data_rt,numkernel,pgnump)
+            train_data, idx_data, train_data_all = point_group_first(train_data_rt,train_data_rt,numkernel,pgnump)
             print('train batch',batch_idx)
             # #disply point cloud
             # point = train_data[0][:][:][:]
@@ -220,6 +221,7 @@ def train_one_epoch(sess, ops, train_writer):
             #log_string('batch num---' + str(batch_idx) + '-----')
             feed_dict = {ops['pointclouds_pl']: train_data,
                          ops['pointclouds_kernel']: idx_data,
+                         ops['pointclouds_all']: train_data_all,
                          ops['labels_pl']: train_label,
                          ops['is_training_pl']: is_training,}
             summary, step, _, loss_val, pred_val = sess.run([ops['merged'], ops['step'],
@@ -340,12 +342,13 @@ def eval_one_epoch(sess, ops, test_writer):
             
             test_data  = current_data[start_idx:end_idx, :, :]
             test_label = current_label[start_idx:end_idx]
-            test_data_pg, idx_data = point_group_first(test_data,test_data,numkernel,pgnump)
+            test_data_pg, idx_data,test_data_all= point_group_first(test_data,test_data,numkernel,pgnump)
             
             print('test batch',batch_idx)
             #log_string('batch num---' + str(batch_idx) + '-----')
             feed_dict = {ops['pointclouds_pl']: test_data_pg,
                          ops['pointclouds_kernel']: idx_data,
+                         ops['pointclouds_all']: test_data_all,
                          ops['labels_pl']: test_label,
                          ops['is_training_pl']: is_training,}
             summary, step, loss_val, pred_val = sess.run([ops['merged'], ops['step'],
