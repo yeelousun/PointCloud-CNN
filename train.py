@@ -71,6 +71,48 @@ def variable_summaries(var, name="layer"):
 def train():
     with tf.Graph().as_default():
         with tf.device('/cpu:0'):
+            #make feature1 w and b
+            outf = 64
+            PGV = 2
+            midHid = 10
+            weightsf1_1 = _variable_with_weight_decay('weights1_1', [outf, PGV, midHid], stddev=1.0 / PGV, activation="selu", wd=0.0004)
+            biasesf1_1 = tf.get_variable(name='biases1_1', shape=[outf,midHid], initializer=tf.constant_initializer(0.0), dtype=tf.float32)
+            weightsf1_2 = _variable_with_weight_decay('weights1_2', [outf, midHid, midHid], stddev=1.0 / midHid, activation="selu", wd=0.0004)
+            biasesf1_2 = tf.get_variable(name='biases1_2', shape=[outf,midHid], initializer=tf.constant_initializer(0.0), dtype=tf.float32)
+            weightsf1_3 = _variable_with_weight_decay('weights1_3', [outf, midHid, 1], stddev=1.0 / midHid, activation="selu", wd=0.0)
+            biasesf1_3 = tf.get_variable(name='biases1_3', shape=[outf,1], initializer=tf.constant_initializer(0.0), dtype=tf.float32)
+            #make feature2 w and b
+            outf = 64
+            PGV = 63
+            midHid = 128
+            weightsf2_1 = _variable_with_weight_decay('weights2_1', [outf, PGV, midHid], stddev=1.0 / PGV, activation="selu", wd=0.0004)
+            biasesf2_1 = tf.get_variable(name='biases2_1', shape=[outf,midHid], initializer=tf.constant_initializer(0.0), dtype=tf.float32)
+            weightsf2_2 = _variable_with_weight_decay('weights2_2', [outf, midHid, midHid], stddev=1.0 / midHid, activation="selu", wd=0.0004)
+            biasesf2_2 = tf.get_variable(name='biases2_2', shape=[outf,midHid], initializer=tf.constant_initializer(0.0), dtype=tf.float32)
+            weightsf2_3 = _variable_with_weight_decay('weights2_3', [outf, midHid, 1], stddev=1.0 / midHid, activation="selu", wd=0.0)
+            biasesf2_3 = tf.get_variable(name='biases2_3', shape=[outf,1], initializer=tf.constant_initializer(0.0), dtype=tf.float32)
+            #make feature3 w and b
+            outf = 64
+            PGV = 63
+            midHid = 128
+            weightsf3_1 = _variable_with_weight_decay('weights3_1', [outf, PGV, midHid], stddev=1.0 / PGV, activation="selu", wd=0.0004)
+            biasesf3_1 = tf.get_variable(name='biases3_1', shape=[outf,midHid], initializer=tf.constant_initializer(0.0), dtype=tf.float32)
+            weightsf3_2 = _variable_with_weight_decay('weights3_2', [outf, midHid, midHid], stddev=1.0 / midHid, activation="selu", wd=0.0004)
+            biasesf3_2 = tf.get_variable(name='biases3_2', shape=[outf,midHid], initializer=tf.constant_initializer(0.0), dtype=tf.float32)
+            weightsf3_3 = _variable_with_weight_decay('weights3_3', [outf, midHid, 1], stddev=1.0 / midHid, activation="selu", wd=0.0)
+            biasesf3_3 = tf.get_variable(name='biases3_3', shape=[outf,1], initializer=tf.constant_initializer(0.0), dtype=tf.float32)
+            #make featureall w and b
+            outf = 128
+            PGV = 2
+            midHid = 10
+            weightsfa_1 = _variable_with_weight_decay('weightsa_1', [outf, PGV, midHid], stddev=1.0 / PGV, activation="selu", wd=0.0004)
+            biasesfa_1 = tf.get_variable(name='biasesa_1', shape=[outf,midHid], initializer=tf.constant_initializer(0.0), dtype=tf.float32)
+            weightsfa_2 = _variable_with_weight_decay('weightsa_2', [outf, midHid, midHid], stddev=1.0 / midHid, activation="selu", wd=0.0004)
+            biasesfa_2 = tf.get_variable(name='biasesa_2', shape=[outf,midHid], initializer=tf.constant_initializer(0.0), dtype=tf.float32)
+            weightsfa_3 = _variable_with_weight_decay('weightsa_3', [outf, midHid, 1], stddev=1.0 / midHid, activation="selu", wd=0.0)
+            biasesfa_3 = tf.get_variable(name='biasesa_3', shape=[outf,1], initializer=tf.constant_initializer(0.0), dtype=tf.float32)
+
+
             pointclouds_pl, pointclouds_kernel, pointclouds_all ,labels_pl = placeholder_inputs(BATCH_SIZE, numkernel, pgnump)    
             is_training_pl = tf.placeholder(tf.bool, shape=())
             print(is_training_pl)
@@ -78,15 +120,43 @@ def train():
             # That tells the optimizer to helpfully increment the 'batch' parameter for you every time it trains.
             batch = tf.Variable(0)
             
-            # Get model and loss 
-            pred = get_model(pointclouds_pl, pointclouds_kernel, pointclouds_all, is_training_pl)
+            # Get model and loss
+            print ('make loss1')
+            pointf1_x = tf.placeholder(tf.float32, [None, 2]) 
+            pointf1_y = tf.placeholder(tf.float32, [None, 1]) 
+            num1  = get_feature_num (pointf1_x,pointf1_y,weightsf1_1,weightsf1_2,weightsf1_3,biasesf1_1,biasesf1_2,biasesf1_3)
+            loss1 = get_feature_loss(pointf1_x,pointf1_y,weightsf1_1,weightsf1_2,weightsf1_3,biasesf1_1,biasesf1_2,biasesf1_3,num1)
+            print ('make loss2')
+            pointf2_x = tf.placeholder(tf.float32, [None, 63]) 
+            pointf2_y = tf.placeholder(tf.float32, [None, 1]) 
+            num2  = get_feature_num (pointf2_x,pointf2_y,weightsf2_1,weightsf2_2,weightsf2_3,biasesf2_1,biasesf2_2,biasesf2_3)
+            loss2 = get_feature_loss(pointf2_x,pointf2_y,weightsf2_1,weightsf2_2,weightsf2_3,biasesf2_1,biasesf2_2,biasesf2_3,num2)
+            print ('make loss3')
+            pointf3_x = tf.placeholder(tf.float32, [None, 63]) 
+            pointf3_y = tf.placeholder(tf.float32, [None, 1]) 
+            num3  = get_feature_num (pointf3_x,pointf3_y,weightsf3_1,weightsf3_2,weightsf3_3,biasesf3_1,biasesf3_2,biasesf3_3)
+            loss3 = get_feature_loss(pointf3_x,pointf3_y,weightsf3_1,weightsf3_2,weightsf3_3,biasesf3_1,biasesf3_2,biasesf3_3,num3)
+            print ('make lossa')
+            pointa_x = tf.placeholder(tf.float32, [None, 2]) 
+            pointa_y = tf.placeholder(tf.float32, [None, 1]) 
+            numa  = get_feature_num (pointa_x,pointa_y,weightsfa_1,weightsfa_2,weightsfa_3,biasesfa_1,biasesfa_2,biasesfa_3)
+            lossa = get_feature_loss(pointa_x,pointa_y,weightsfa_1,weightsfa_2,weightsfa_3,biasesfa_1,biasesfa_2,biasesfa_3,numa)
+
+            print ('make model')
+            pred,predf1,predf2  = get_model(pointclouds_pl, pointclouds_kernel, pointclouds_all, 
+                                            weightsf1_1,weightsf1_2,weightsf1_2,biasesf1_1,biasesf1_2,biasesf1_3,
+                                            weightsf2_1,weightsf2_2,weightsf2_2,biasesf2_1,biasesf2_2,biasesf2_3,
+                                            weightsf3_1,weightsf3_2,weightsf3_2,biasesf3_1,biasesf3_2,biasesf3_3,
+                                            weightsfa_1,weightsfa_2,weightsfa_3,biasesfa_1,biasesfa_2,biasesfa_3,
+                                            is_training_pl)
+            print ('make loss')
             loss = get_loss(pred, labels_pl)
             tf.summary.scalar('loss', loss)
 
             correct = tf.equal(tf.argmax(pred, 1), tf.to_int64(labels_pl))
             accuracy = tf.reduce_sum(tf.cast(correct, tf.float32)) / float(BATCH_SIZE)
             tf.summary.scalar('accuracy', accuracy)
-
+            print ('make operator')
             # Get training operator
             learning_rate = get_learning_rate(batch)
             tf.summary.scalar('learning_rate', learning_rate)
@@ -96,6 +166,17 @@ def train():
                 optimizer = tf.train.AdamOptimizer(learning_rate)
             train_op = optimizer.minimize(loss, global_step=batch)
             
+            print('train_op')
+            optimizerf1 = tf.train.MomentumOptimizer(0.05,0.9)
+            optimizerf2 = tf.train.MomentumOptimizer(0.05,0.9)
+            optimizerf3 = tf.train.MomentumOptimizer(0.05,0.9)
+            optimizerfa = tf.train.MomentumOptimizer(0.05,0.9)
+            
+            print('train_f')
+            trainf1 = optimizerf1.minimize(loss1)
+            trainf2 = optimizerf2.minimize(loss2)
+            trainf3 = optimizerf3.minimize(loss3)
+            trainfa = optimizerfa.minimize(lossa)
             '''
             var_list_w = [var for var in tf.trainable_variables() if "w" in var.name]
             #var_list_b = [var for var in tf.trainable_variables() if "b" in var.name]
@@ -125,7 +206,7 @@ def train():
         train_writer = tf.summary.FileWriter(os.path.join(LOG_DIR, 'train'),
                                   sess.graph)
         test_writer = tf.summary.FileWriter(os.path.join(LOG_DIR, 'test'))
-
+        print ('make init')
         # Init variables
         init = tf.global_variables_initializer()
         sess.run(init, {is_training_pl: True})
@@ -136,10 +217,24 @@ def train():
                'labels_pl': labels_pl,
                'is_training_pl': is_training_pl,
                'pred': pred,
+               'predf1': predf1,
+               'predf2': predf2,
                'loss': loss,
                'train_op': train_op,
                'merged': merged,
-               'step': batch}
+               'step': batch,
+               'pointf1_x':pointf1_x,
+               'pointf2_x':pointf2_x,
+               'pointf3_x':pointf3_x,
+               'pointa_x':pointa_x,
+               'pointf1_y':pointf1_y,
+               'pointf2_y':pointf2_y,
+               'pointf3_y':pointf3_y,
+               'pointa_y':pointa_y,
+               'trainf1':trainf1,
+               'trainf2':trainf2,
+               'trainf3':trainf3,
+               'trainfa':trainfa}
         
         max_acc=0
 
@@ -189,6 +284,8 @@ def train_one_epoch(sess, ops, train_writer):
             train_label = current_label[start_idx:end_idx]
             train_data, idx_data, train_data_all = point_group_first(train_data_rt,train_data_rt,numkernel,pgnump)
             print('train batch',batch_idx)
+            ##train feature1 
+            
             # #disply point cloud
             # point = train_data[0][:][:][:]
             # point1 = idx_data[0][:][:]
@@ -363,7 +460,26 @@ def eval_one_epoch(sess, ops, test_writer):
         log_string('test mean loss: %f' % (loss_sum / float(num_batches)))
         log_string('test accuracy: %f' % (total_correct / float(total_seen)))
 
-
+def _variable_with_weight_decay(name, shape, activation, stddev, wd=None):    
+    # Determine number of input features from shape
+    f_in = np.prod(shape[:-1]) if len(shape) == 4 else shape[0]
+    
+    # Calculate sdev for initialization according to activation function
+    if activation == selu:
+        sdev = sqrt(1 / f_in)
+    elif activation == tf.nn.relu:
+        sdev = sqrt(2 / f_in)
+    elif activation == tf.nn.elu:
+        sdev = sqrt(1.5505188080679277 / f_in)
+    else:
+        sdev = stddev
+    
+    var = tf.get_variable(name=name, shape=shape,
+                          initializer=tf.truncated_normal_initializer(stddev=sdev, dtype=tf.float32))
+    if wd is not None:
+        weight_decay = tf.multiply(tf.nn.l2_loss(var), wd, name='weight_loss')
+        tf.add_to_collection('losses', weight_decay)
+    return var
 
 if __name__ == "__main__":
     train()

@@ -27,22 +27,65 @@ def placeholder_inputs(batch_size, numkernel, pgnump):
     labels_pl = tf.placeholder(tf.int32, shape=(batch_size))
     return pointclouds_pl, pointclouds_kernel, pointclouds_all, labels_pl
 
-def get_model(point_cloud, point_cloud_kernel,point_cloud_all, is_training = True, bn_decay=None):
+def get_model(point_cloud, point_cloud_kernel,point_cloud_all, 
+              Weights_f1_1, Weights_f1_2, Weights_f1_3, biases_f1_1, biases_f1_2, biases_f1_3,
+              Weights_f2_1, Weights_f2_2, Weights_f2_3, biases_f2_1, biases_f2_2, biases_f2_3,
+              Weights_f3_1, Weights_f3_2, Weights_f3_3, biases_f3_1, biases_f3_2, biases_f3_3,
+              Weights_all1_1, Weights_all1_2, Weights_all1_3, biases_all1_1, biases_all1_2, biases_all1_3,
+              is_training = True):
     """ Classification PointNet, input is BxPGKxPGNx3, output Bx40 """
-    # if is_training == True:
-    #     dropout_prob_conv = 0.1
-    #     dropout_prob_f = 0.2
-    # else:
-    #     dropout_prob_conv = 0.0
-    #     dropout_prob_f = 0.0
-       
+    if is_training == True:
+        dropout_prob_conv = 0.1
+        dropout_prob_f = 0.2
+    else:
+        dropout_prob_conv = 0.0
+        dropout_prob_f = 0.0
+        
 
     batch_size = point_cloud.get_shape()[0].value
     PGK = point_cloud.get_shape()[1].value
     PGN = point_cloud.get_shape()[2].value
+    ##allnet1
+    point_cloud_all = tf.reshape(point_cloud_all, [batch_size, 1, PGK, -1])
+    allnet1_x = tf.slice(point_cloud, [0, 0, 0, 0], [-1, -1,-1, 2])
+    allnet1_y = tf.slice(point_cloud, [0, 0, 0, 2], [-1, -1,-1, 1])
+    allf1net = get_feature( "all_feature1", allnet1_x, allnet1_y, Weights_all1_1, Weights_all1_2, Weights_all1_3, biases_all1_1, biases_all1_2, biases_all1_3)
+    allf1net = tf.reshape(allf1net, [batch_size, PGK, -1])
+    feature_all = tf.reduce_sum(allf1net, 1, keep_dims=False)
+    feature_all = tf.cast(feature_all, tf.float32)
+    
     ##net1
     net1_x = tf.slice(point_cloud, [0, 0, 0, 0], [-1, -1,-1, 2])
     net1_y = tf.slice(point_cloud, [0, 0, 0, 2], [-1, -1,-1, 1])
+      
+    f1net = get_feature( "feature1", net1_x, net1_y, Weights_f1_1, Weights_f1_2, Weights_f1_3, biases_f1_1, biases_f1_2, biases_f1_3)
+    f1net = tf.reshape(f1net, [batch_size, PGK, -1])
+    feature_1 = tf.reduce_sum(f1net, 1, keep_dims=False)
+    feature_1 = tf.cast(feature_1, tf.float32)
+    
+    ##net2
+    f2net, _ = point_group("point group2", point_cloud_kernel,f1net,32,PGN)
+    
+    net2_x = tf.slice(f2net, [0, 0, 0, 0], [-1, -1,-1, 63])
+    net2_y = tf.slice(f2net, [0, 0, 0, 63], [-1, -1,-1, 1])
+    
+    f2net = get_feature( "feature2", net2_x, net2_y, Weights_f2_1, Weights_f2_2, Weights_f2_3, biases_f2_1, biases_f2_2, biases_f2_3)
+      
+    f2net = tf.reshape(f2net, [batch_size, 32, -1])
+    feature_2 = tf.reduce_sum(f2net, 1, keep_dims=False)
+    feature_2 = tf.cast(feature_2, tf.float32)
+    
+    ##net3
+    f3net = tf.reshape(f2net, [batch_size, 1, 32, -1])
+    net3_x = tf.slice(f3net, [0, 0, 0, 0], [-1, -1,-1, 63])
+    net3_y = tf.slice(f3net, [0, 0, 0, 63], [-1, -1,-1, 1])
+    
+    f3net = get_feature( "feature3", net3_x, net3_y, Weights_f3_1, Weights_f3_2, Weights_f3_3, biases_f3_1, biases_f3_2, biases_f3_3)
+      
+    f3net = tf.reshape(f3net, [batch_size, 1, -1])
+    feature_3 = tf.reduce_sum(f3net, 1, keep_dims=False)
+    feature_3 = tf.cast(feature_3, tf.float32)
+    '''
     for y_num in range (64): 
         if y_num == 0:
             net1_y_num = net1_y
@@ -68,14 +111,14 @@ def get_model(point_cloud, point_cloud_kernel,point_cloud_all, is_training = Tru
     ##net2
     net2_x = tf.slice(net2_2, [0, 0, 0, 0], [-1, -1,-1, 63])
     net2_y = tf.slice(net2_2, [0, 0, 0, 63], [-1, -1,-1, 1])
-    for y_num in range (256): 
+    for y_num in range (64): 
         if y_num == 0:
             net2_y_num = net2_y
         else :      
             net2_y_num = tf.concat([net2_y_num,net2_y],axis=3)
 
-    net2 = conv2d("conv2_1", input=net2_x, activation=selu, ksize=1, f_in=63, f_out=512)
-    net2 = conv2d("conv2_2", input=net2, activation=selu, ksize=1, f_in=512, f_out=256)
+    net2 = conv2d("conv2_1", input=net2_x, activation=selu, ksize=1, f_in=63, f_out=128)
+    net2 = conv2d("conv2_2", input=net2, activation=selu, ksize=1, f_in=128, f_out=64)
     #norm
     net2_norm = tf.sqrt(tf.reduce_sum(tf.square(net2), axis=2))  
     net2_y_norm = tf.sqrt(tf.reduce_sum(tf.square(net2_y_num), axis=2))  
@@ -90,16 +133,16 @@ def get_model(point_cloud, point_cloud_kernel,point_cloud_all, is_training = Tru
     net2_f = tf.reshape(net2cos_norm, [batch_size, 1, 32, -1])
     
     ##net3
-    net3_x = tf.slice(net2_f, [0, 0, 0, 0], [-1, -1,-1, 255])
-    net3_y = tf.slice(net2_f, [0, 0, 0, 255], [-1, -1,-1, 1])
-    for y_num in range (256): 
+    net3_x = tf.slice(net2_f, [0, 0, 0, 0], [-1, -1,-1, 63])
+    net3_y = tf.slice(net2_f, [0, 0, 0, 63], [-1, -1,-1, 1])
+    for y_num in range (64): 
         if y_num == 0:
             net3_y_num = net3_y
         else :      
             net3_y_num = tf.concat([net3_y_num,net3_y],axis=3)
 
-    net3 = conv2d("conv3_1", input=net3_x, activation=selu, ksize=1, f_in=255, f_out=512)
-    net3 = conv2d("conv3_2", input=net3, activation=selu, ksize=1, f_in=512, f_out=256)
+    net3 = conv2d("conv3_1", input=net3_x, activation=selu, ksize=1, f_in=63, f_out=128)
+    net3 = conv2d("conv3_2", input=net3, activation=selu, ksize=1, f_in=128, f_out=64)
     #norm
     net3_norm = tf.sqrt(tf.reduce_sum(tf.square(net3), axis=2))  
     net3_y_norm = tf.sqrt(tf.reduce_sum(tf.square(net3_y_num), axis=2))  
@@ -110,22 +153,22 @@ def get_model(point_cloud, point_cloud_kernel,point_cloud_all, is_training = Tru
     #feature3
     Feature3 = tf.reduce_mean(net3cos_norm, 1, keep_dims=False)
     Feature3 = tf.reshape(Feature3, [batch_size, -1])
-
-    net = tf.concat([Feature1,Feature2,Feature3],axis=1)
+    '''
+    net = tf.concat([feature_all,feature_1,feature_2,feature_3],axis=1)
     dim = net.get_shape()[1].value
 
     net = fc('fully_connected1', input=net, activation=selu, n_in=dim, n_out=256, stddev=0.04, bias_init=0.1,
                  weight_decay=0.004)
-    #net = dropout_selu(net, dropout_prob_f,training=is_training)
+    net = dropout_selu(net, dropout_prob_f,training=is_training)
     net = fc('fully_connected2', input=net, activation=selu, n_in=256, n_out=128, stddev=0.04, bias_init=0.1,
                  weight_decay=0.004)
-    #net = dropout_selu(net, dropout_prob_f,training=is_training)
+    net = dropout_selu(net, dropout_prob_f,training=is_training)
 
     weights = _variable_with_weight_decay('weights', [128, 40], stddev=1 / 128.0, activation="selu", wd=0.0)
     biases = tf.get_variable(name='biases', shape=[40], initializer=tf.constant_initializer(0.0), dtype=tf.float32)
     net = tf.add(tf.matmul(net, weights), biases, name='output')
        
-    return net
+    return net, f1net, f2net
 
 def get_loss(pred, label):
     """ pred: B*NUM_CLASSES,
@@ -212,7 +255,7 @@ def fc(scope_name, input, activation, n_in, n_out, stddev=0.04, bias_init=0.0, w
         biases = tf.get_variable(name='biases', shape=[n_out], initializer=tf.constant_initializer(bias_init),
                                  dtype=tf.float32)
         return activation(tf.matmul(input, weights) + biases, name=scope.name)
-'''
+
 def dropout_selu(x, rate, alpha= -1.7580993408473766, fixedPointMean=0.0, fixedPointVar=1.0, 
                  noise_shape=None, seed=None, name=None, training=False):
     """Dropout to a value with rescaling."""
@@ -249,4 +292,72 @@ def dropout_selu(x, rate, alpha= -1.7580993408473766, fixedPointMean=0.0, fixedP
         return utils.smart_cond(training,
             lambda: dropout_selu_impl(x, rate, alpha, noise_shape, seed, name),
             lambda: array_ops.identity(x))
-'''
+
+def get_feature_num(net_x,nety,Weights_f1,Weights_f2,Weights_f3,biases_f1,biases_f2,biases_f3):
+    outf = Weights_f1.get_shape()[1].value
+    for feature_idx in range(outf):
+        subfeature = selu(tf.matmul(net_x, Weights_f1[feature_idx]) + biases_f1[feature_idx])
+        subfeature = selu(tf.matmul(subfeature, Weights_f2[feature_idx]) + biases_f2[feature_idx])
+        subfeature = tf.add(tf.matmul(subfeature, Weights_f3[feature_idx]), biases_f3[feature_idx])
+        subsum = tf.square(subfeature - nety)
+        subloss = tf.reduce_mean(subsum)
+        subloss = tf.expand_dims(subloss,0)
+
+        if feature_idx == 0:
+            subloss_a = subloss
+        else :
+            subloss_a = tf.concat([subloss_a,subloss],axis=0)
+    num = tf.argmin(subloss_a, 1)   
+    
+    return num
+
+def get_feature_loss(net_x,nety,Weights_f1,Weights_f2,Weights_f3,biases_f1,biases_f2,biases_f3,num):
+    feature_idx = num
+
+    subfeature = selu(tf.matmul(net_x, Weights_f1[feature_idx]) + biases_f1[feature_idx])
+    subfeature = selu(tf.matmul(subfeature, Weights_f2[feature_idx]) + biases_f2[feature_idx])
+    subfeature = tf.add(tf.matmul(subfeature, Weights_f3[feature_idx]), biases_f3[feature_idx])
+    subsum = tf.square(subfeature - nety)
+    subloss = tf.reduce_mean(subsum)
+    
+    return subloss,subfeature
+
+def get_feature( scope_name, net1_x, net1_y, Weights_f1 ,Weights_f2,Weights_f3,biases_f1,biases_f2,biases_f3):
+    batch_size = net1_x.get_shape()[0].value
+    PGK = net1_x.get_shape()[1].value
+    PGN = net1_x.get_shape()[2].value
+    PGV = net1_x.get_shape()[3].value
+    outf = Weights_f1.get_shape()[1].value
+
+    with tf.variable_scope(scope_name) as scope:
+        for batch_idx in range (batch_size):
+            print ('batch_idx',scope.name, batch_idx)
+            for PGK_idx in range (PGK):
+                print ('PGK_idx',scope.name, PGK_idx)
+                
+                train_x = net1_x[batch_idx,PGK_idx]
+                train_y = net1_y[batch_idx,PGK_idx]          
+                for feature_idx in range(outf):
+                    subfeature = selu(tf.matmul(train_x, Weights_f1[feature_idx]) + biases_f1[feature_idx], name=scope.name)
+                    subfeature = selu(tf.matmul(subfeature, Weights_f2[feature_idx]) + biases_f2[feature_idx], name=scope.name)
+                    subfeature = tf.add(tf.matmul(subfeature, Weights_f3[feature_idx]), biases_f3[feature_idx], name=scope.name)
+                    subsum = tf.square(subfeature - train_y)
+                    
+                    sub_feature = tf.divide(tf.cast(tf.count_nonzero(tf.clip_by_value(subsum, 0.01, 5)-tf.clip_by_value(subsum, 0.05, 5)),tf.float32),PGN)
+                    sub_feature = tf.maximum(sub_feature, 0.00001)
+                    sub_feature = tf.reshape(sub_feature, [1,1,1])
+                    
+                    if feature_idx == 0:
+                        sub_feature_a = sub_feature
+                    else :
+                        sub_feature_a = tf.concat([sub_feature_a,sub_feature],axis=2)
+                if PGK_idx == 0:
+                    PGKfeature = sub_feature_a
+                else :    
+                    PGKfeature = tf.concat([PGKfeature,sub_feature_a],axis=1)
+            if batch_idx == 0:
+                batchfeature = PGKfeature
+            else :
+                batchfeature = tf.concat([batchfeature,PGKfeature],axis=0)             
+                
+    return  batchfeature
