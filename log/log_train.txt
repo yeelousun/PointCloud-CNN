@@ -1,3 +1,0 @@
-**** EPOCH 000 ****
-train file NUM---0-----
-train file size---2048-----

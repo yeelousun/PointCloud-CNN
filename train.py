@@ -220,6 +220,10 @@ def train():
                'predf1': predf1,
                'predf2': predf2,
                'loss': loss,
+               'loss1': loss1,
+               'loss2': loss2,
+               'loss3': loss3,
+               'lossa': lossa,
                'train_op': train_op,
                'merged': merged,
                'step': batch,
@@ -284,6 +288,76 @@ def train_one_epoch(sess, ops, train_writer):
             train_label = current_label[start_idx:end_idx]
             train_data, idx_data, train_data_all = point_group_first(train_data_rt,train_data_rt,numkernel,pgnump)
             print('train batch',batch_idx)
+            
+            #feature all
+            for featurea_batch_idx in range (BATCH_SIZE):
+                featurea_train = train_data_all[featurea_batch_idx,:,0:2]
+                featurea_label = train_data_all[featurea_batch_idx,:,2:3]
+                feed_dict = {ops['pointa_x']: featurea_train,
+                            ops['pointa_y']: featurea_label,}
+                count = 0
+                while count< 100: 
+                    featurea_loss,_ = sess.run([ops['lossa'], ops['trainfa']], feed_dict=feed_dict)
+                    count += 1
+                    print('feature1_loss', count, featurea_loss)
+
+            #feature 1
+            for feature1_batch_idx in range (BATCH_SIZE):
+                for feature1_kernel_idx in range (numkernel):
+                    feature1_train = train_data[feature1_batch_idx,feature1_kernel_idx,:,0:2]
+                    feature1_label = train_data[feature1_batch_idx,feature1_kernel_idx,:,2:3]
+                    feed_dict = {ops['pointf1_x']: feature1_train,
+                                 ops['pointf1_y']: feature1_label,}
+                    count = 0
+                    while count< 100: 
+                        feature1_loss,_ = sess.run([ops['loss1'], ops['trainf1']], feed_dict=feed_dict)
+                        count += 1
+                        print('feature1_loss', count, feature1_loss)
+            
+            feed_dict = {ops['pointclouds_pl']: train_data,
+                         ops['pointclouds_kernel']: idx_data,
+                         ops['pointclouds_all']: train_data_all,
+                         ops['labels_pl']: train_label,
+                         ops['is_training_pl']: is_training,}
+
+            feature1_res = sess.run([ops['predf1']], feed_dict = feed_dict)
+
+
+            #feature 2
+            for feature2_batch_idx in range (BATCH_SIZE):
+                for feature2_kernel_idx in range (32):
+                    feature2_train = feature1_res[feature2_batch_idx,feature2_kernel_idx,:,0:63]
+                    feature2_label = feature1_res[feature2_batch_idx,feature2_kernel_idx,:,63:64]
+                    feed_dict = {ops['pointf2_x']: feature2_train,
+                                 ops['pointf2_y']: feature2_label,}
+                    count = 0
+                    while count< 100: 
+                        feature2_loss,_ = sess.run([ops['loss2'], ops['trainf2']], feed_dict=feed_dict)
+                        count += 1
+                        print('feature2_loss', count, feature2_loss)
+            
+            feed_dict = {ops['pointclouds_pl']: train_data,
+                         ops['pointclouds_kernel']: idx_data,
+                         ops['pointclouds_all']: train_data_all,
+                         ops['labels_pl']: train_label,
+                         ops['is_training_pl']: is_training,}
+
+            feature2_res = sess.run([ops['predf2']], feed_dict = feed_dict)
+
+            #feature 3
+            for feature3_batch_idx in range (BATCH_SIZE):
+                for feature3_kernel_idx in range (1):
+                    feature3_train = feature2_res[feature3_batch_idx,feature3_kernel_idx,:,0:63]
+                    feature3_label = feature2_res[feature3_batch_idx,feature3_kernel_idx,:,63:64]
+                    feed_dict = {ops['pointf3_x']: feature3_train,
+                                 ops['pointf3_y']: feature3_label,}
+                    count = 0
+                    while count< 100: 
+                        feature3_loss,_ = sess.run([ops['loss3'], ops['trainf3']], feed_dict=feed_dict)
+                        count += 1
+                        print('feature3_loss', count, feature3_loss)
+           
+
             ##train feature1 
             
             # #disply point cloud

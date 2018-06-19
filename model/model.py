@@ -64,10 +64,10 @@ def get_model(point_cloud, point_cloud_kernel,point_cloud_all,
     feature_1 = tf.cast(feature_1, tf.float32)
     
     ##net2
-    f2net, _ = point_group("point group2", point_cloud_kernel,f1net,32,PGN)
+    f2net_input, _ = point_group("point group2", point_cloud_kernel,f1net,32,PGN)
     
-    net2_x = tf.slice(f2net, [0, 0, 0, 0], [-1, -1,-1, 63])
-    net2_y = tf.slice(f2net, [0, 0, 0, 63], [-1, -1,-1, 1])
+    net2_x = tf.slice(f2net_input, [0, 0, 0, 0], [-1, -1,-1, 63])
+    net2_y = tf.slice(f2net_input, [0, 0, 0, 63], [-1, -1,-1, 1])
     
     f2net = get_feature( "feature2", net2_x, net2_y, Weights_f2_1, Weights_f2_2, Weights_f2_3, biases_f2_1, biases_f2_2, biases_f2_3)
       
@@ -76,9 +76,9 @@ def get_model(point_cloud, point_cloud_kernel,point_cloud_all,
     feature_2 = tf.cast(feature_2, tf.float32)
     
     ##net3
-    f3net = tf.reshape(f2net, [batch_size, 1, 32, -1])
-    net3_x = tf.slice(f3net, [0, 0, 0, 0], [-1, -1,-1, 63])
-    net3_y = tf.slice(f3net, [0, 0, 0, 63], [-1, -1,-1, 1])
+    f3net_input = tf.reshape(f2net, [batch_size, 1, 32, -1])
+    net3_x = tf.slice(f3net_input, [0, 0, 0, 0], [-1, -1,-1, 63])
+    net3_y = tf.slice(f3net_input, [0, 0, 0, 63], [-1, -1,-1, 1])
     
     f3net = get_feature( "feature3", net3_x, net3_y, Weights_f3_1, Weights_f3_2, Weights_f3_3, biases_f3_1, biases_f3_2, biases_f3_3)
       
@@ -168,7 +168,7 @@ def get_model(point_cloud, point_cloud_kernel,point_cloud_all,
     biases = tf.get_variable(name='biases', shape=[40], initializer=tf.constant_initializer(0.0), dtype=tf.float32)
     net = tf.add(tf.matmul(net, weights), biases, name='output')
        
-    return net, f1net, f2net
+    return net, f2net_input, f3net_input
 
 def get_loss(pred, label):
     """ pred: B*NUM_CLASSES,
