@@ -33,125 +33,104 @@ def get_model(point_cloud, point_cloud_m4, point_cloud_kernel,point_cloud_all, i
     """ Classification PointNet, input is BxPGKxPGNx3, output Bx40 """
     if is_training == True:
         dropout_prob_conv = 0.1
-        dropout_prob_f = 0.2
+        dropout_prob_f = 0.3
     else:
         dropout_prob_conv = 0.0
         dropout_prob_f = 0.0
        
-    feature_num = 3
-    out_feature = 32
     batch_size = point_cloud.get_shape()[0].value
     PGK = point_cloud.get_shape()[1].value
     PGN = point_cloud.get_shape()[2].value
     PGN_m4 = point_cloud_m4.get_shape()[2].value
     point_cloud_all =  tf.reshape(point_cloud_all, [batch_size, 1, PGK, -1])
-
-    weights1 = _variable_with_weight_decay('weights1', [feature_num, out_feature, 1, 1, 2, 10], stddev=1.0 / 2, activation="selu", wd=0.0004)
-    biases1 = tf.get_variable(name='biases1', shape=[feature_num, out_feature, 10], initializer=tf.constant_initializer(0.0), dtype=tf.float32)
-    weights2 = _variable_with_weight_decay('weights2', [feature_num, out_feature, 1, 1, 10, 10], stddev=1.0 / 10, activation="selu", wd=0.0004)
-    biases2 = tf.get_variable(name='biases2', shape=[feature_num, out_feature, 10], initializer=tf.constant_initializer(0.0), dtype=tf.float32)
-    weights3 = _variable_with_weight_decay('weights3', [feature_num, out_feature, 1, 1, 10, 1], stddev=1.0 / 10, activation="selu", wd=0.0)
-    biases3 = tf.get_variable(name='biases3', shape=[feature_num, out_feature, 1], initializer=tf.constant_initializer(0.0), dtype=tf.float32)    
-    
+       
     ##net_all
     with tf.variable_scope('net_all') as scope:
         net_all_x = tf.slice(point_cloud_all, [0, 0, 0, 0], [-1, -1,-1, 2])
         net_all_y = tf.slice(point_cloud_all, [0, 0, 0, 2], [-1, -1,-1, 1])
-        for out_feature_idx in range (out_feature):
-            conv = tf.nn.conv2d(net_all_x, weights1[0,out_feature_idx], [1, 1, 1, 1], padding='SAME')
-            pre_activation = tf.nn.bias_add(conv, biases1[0,out_feature_idx])
-            conv = selu(pre_activation)
+        for y_num in range (512): 
+            if y_num == 0:
+                net_all_y_m = net_all_y
+            else :      
+                net_all_y_m = tf.concat([net_all_y_m,net_all_y],axis=3)
+        neta = conv2d("conv1_1", input=net_all_x, activation=selu, ksize=1, f_in=2, f_out=256)
+        neta = conv2d("conv1_2", input=neta, activation=selu, ksize=1, f_in=256, f_out=2048)
+        neta = conv2d("conv1_3", input=neta, activation=selu, ksize=1, f_in=2048, f_out=2048)
+        neta = conv2d_non("conv1_4", input=neta, activation=selu, ksize=1, f_in=2048, f_out=512)
+                  
+        loss_a = tf.reduce_mean(tf.square(net_all_y_m - neta),axis=2)
+        loss_a = tf.add(loss_a,1)
 
-            conv = tf.nn.conv2d(conv, weights2[0,out_feature_idx], [1, 1, 1, 1], padding='SAME')
-            pre_activation = tf.nn.bias_add(conv, biases2[0,out_feature_idx])
-            conv = selu(pre_activation)
-
-            conv = tf.nn.conv2d(conv, weights3[0,out_feature_idx], [1, 1, 1, 1], padding='SAME')
-            pre_activation = tf.nn.bias_add(conv, biases3[0,out_feature_idx])
-            
-            loss = tf.reduce_mean(tf.square(pre_activation - net_all_y),axis=2)
-            loss = tf.add(loss,1)
-            outfeature = tf.pow(loss, -1)
-            outfeature = tf.multiply(outfeature,10.0)
-            outfeature = tf.maximum(outfeature, 0.00001)
-            outfeature = tf.reshape(outfeature, [batch_size, 1])
-            if out_feature_idx == 0:
-                out_allfeature = outfeature
-            else :
-                out_allfeature = tf.concat([out_allfeature,outfeature],axis=1)
+        out_allfeature = tf.pow(loss_a, -1)
+        out_allfeature = tf.multiply(out_allfeature,10.0)
+        out_allfeature = tf.maximum(out_allfeature, 0.00001)
+        out_allfeature = tf.reshape(out_allfeature, [batch_size, -1])
         out_allfeature = tf.cast(out_allfeature, tf.float32)
     ##net_pc
     with tf.variable_scope('net_pointcloud') as scope:
         net_pc_x = tf.slice(point_cloud, [0, 0, 0, 0], [-1, -1,-1, 2])
         net_pc_y = tf.slice(point_cloud, [0, 0, 0, 2], [-1, -1,-1, 1])
-        for out_feature_idx in range (out_feature):
-            conv = tf.nn.conv2d(net_pc_x, weights1[1,out_feature_idx], [1, 1, 1, 1], padding='SAME')
-            pre_activation = tf.nn.bias_add(conv, biases1[1,out_feature_idx])
-            conv = selu(pre_activation)
+        for y_num in range (512): 
+            if y_num == 0:
+                net_pc_y_m = net_pc_y
+            else :      
+                net_pc_y_m = tf.concat([net_pc_y_m, net_pc_y],axis=3)
 
-            conv = tf.nn.conv2d(conv, weights2[1,out_feature_idx], [1, 1, 1, 1], padding='SAME')
-            pre_activation = tf.nn.bias_add(conv, biases2[1,out_feature_idx])
-            conv = selu(pre_activation)
-
-            conv = tf.nn.conv2d(conv, weights3[1,out_feature_idx], [1, 1, 1, 1], padding='SAME')
-            pre_activation = tf.nn.bias_add(conv, biases3[1,out_feature_idx])
+        netpc = conv2d("conv2_1", input=net_pc_x, activation=selu, ksize=1, f_in=2, f_out=256)
+        netpc = conv2d("conv2_2", input=netpc, activation=selu, ksize=1, f_in=256, f_out=2048)
+        netpc = conv2d("conv2_3", input=netpc, activation=selu, ksize=1, f_in=2048, f_out=2048)
+        netpc = conv2d_non("conv2_4", input=netpc, activation=selu, ksize=1, f_in=2048, f_out=512)
             
-            loss = tf.reduce_mean(tf.square(pre_activation - net_pc_y),axis=2)
-            loss = tf.add(loss,1)
-            outfeature = tf.pow(loss, -1)
-            outfeature = tf.multiply(outfeature,10.0)
-            outfeature = tf.maximum(outfeature, 0.00001)
-            outfeature = tf.reshape(outfeature, [batch_size, PGK, -1])
-            outfeature = tf.reduce_sum(outfeature, 1, keep_dims=False)
-            outfeature = tf.reshape(outfeature, [batch_size, 1])
-            if out_feature_idx == 0:
-                out_pcfeature = outfeature
-            else :
-                out_pcfeature = tf.concat([out_pcfeature,outfeature],axis=1)
+        loss_pc = tf.reduce_mean(tf.square(net_pc_y_m - netpc),axis=2)
+        loss_pc = tf.add(loss_pc,1)
+
+        out_pcfeature = tf.pow(loss_pc, -1)
+        out_pcfeature = tf.multiply(out_pcfeature,10.0)
+        out_pcfeature = tf.maximum(out_pcfeature, 0.00001)
+        out_pcfeature = tf.reshape(out_pcfeature, [batch_size, 1, PGK, -1])
+        out_pcfeature = tf.nn.max_pool(out_pcfeature, ksize=[1, 1, PGK, 1], strides=[1, 1, 1, 1],padding='VALID',name="max_pool_pc")
+        #outfeature = tf.reduce_sum(outfeature, 1, keep_dims=False)
+        out_pcfeature = tf.reshape(out_pcfeature, [batch_size, -1])
         out_pcfeature = tf.cast(out_pcfeature, tf.float32)        
 
     ##net_pc_m4
     with tf.variable_scope('net_pointcloud_m4') as scope:
         net_pcm4_x = tf.slice(point_cloud_m4, [0, 0, 0, 0], [-1, -1,-1, 2])
         net_pcm4_y = tf.slice(point_cloud_m4, [0, 0, 0, 2], [-1, -1,-1, 1])
-        for out_feature_idx in range (out_feature):
-            conv = tf.nn.conv2d(net_pcm4_x, weights1[2,out_feature_idx], [1, 1, 1, 1], padding='SAME')
-            pre_activation = tf.nn.bias_add(conv, biases1[2,out_feature_idx])
-            conv = selu(pre_activation)
+        for y_num in range (512): 
+            if y_num == 0:
+                net_pcm4_y_m = net_pcm4_y
+            else :      
+                net_pcm4_y_m = tf.concat([net_pcm4_y_m, net_pcm4_y],axis=3)
 
-            conv = tf.nn.conv2d(conv, weights2[2,out_feature_idx], [1, 1, 1, 1], padding='SAME')
-            pre_activation = tf.nn.bias_add(conv, biases2[2,out_feature_idx])
-            conv = selu(pre_activation)
+        netpcm4 = conv2d("conv3_1", input=net_pcm4_x, activation=selu, ksize=1, f_in=2, f_out=256)
+        netpcm4 = conv2d("conv3_2", input=netpcm4, activation=selu, ksize=1, f_in=256, f_out=2048)
+        netpcm4 = conv2d("conv3_3", input=netpcm4, activation=selu, ksize=1, f_in=2048, f_out=2048)
+        netpcm4 = conv2d_non("conv3_4", input=netpcm4, activation=selu, ksize=1, f_in=2048, f_out=512)
 
-            conv = tf.nn.conv2d(conv, weights3[2,out_feature_idx], [1, 1, 1, 1], padding='SAME')
-            pre_activation = tf.nn.bias_add(conv, biases3[2,out_feature_idx])
-            
-            loss = tf.reduce_mean(tf.square(pre_activation - net_pcm4_y),axis=2)
-            loss = tf.add(loss,1)
-            outfeature = tf.pow(loss, -1)
-            outfeature = tf.multiply(outfeature,10.0)
-            outfeature = tf.maximum(outfeature, 0.00001)
-            outfeature = tf.reshape(outfeature, [batch_size, PGK, -1])
-            outfeature = tf.reduce_sum(outfeature, 1, keep_dims=False)
-            outfeature = tf.reshape(outfeature, [batch_size, 1])
-            if out_feature_idx == 0:
-                out_pcm4feature = outfeature
-            else :
-                out_pcm4feature = tf.concat([out_pcm4feature,outfeature],axis=1)
-        out_pcm4feature = tf.cast(out_pcm4feature, tf.float32)   
+        loss_pcm4 = tf.reduce_mean(tf.square(net_pcm4_y_m - netpcm4),axis=2)
+        loss_pcm4 = tf.add(loss_pcm4, 1)
 
+        out_pcm4feature = tf.pow(loss_pcm4, -1)
+        out_pcm4feature = tf.multiply(out_pcm4feature,10.0)
+        out_pcm4feature = tf.maximum(out_pcm4feature, 0.00001)
+        out_pcm4feature = tf.reshape(out_pcm4feature, [batch_size, 1, PGK, -1])
+        out_pcm4feature = tf.nn.max_pool(out_pcm4feature, ksize=[1, 1, PGK, 1], strides=[1, 1, 1, 1],padding='VALID',name="max_pool_pcm4")
+        #outfeature = tf.reduce_sum(outfeature, 1, keep_dims=False)
+        out_pcm4feature = tf.reshape(out_pcm4feature, [batch_size, -1])
+        out_pcm4feature = tf.cast(out_pcm4feature, tf.float32)  
 
     net = tf.concat([out_allfeature,out_pcfeature,out_pcm4feature],axis=1)
     dim = net.get_shape()[1].value
 
-    net = fc('fully_connected1', input=net, activation=selu, n_in=dim, n_out=256, stddev=0.04, bias_init=0.1,
+    net = fc('fully_connected1', input=net, activation=selu, n_in=dim, n_out=512, stddev=0.04, bias_init=0.1,
                  weight_decay=0.004)
     net = dropout_selu(net, dropout_prob_f,training=is_training)
-    net = fc('fully_connected2', input=net, activation=selu, n_in=256, n_out=128, stddev=0.04, bias_init=0.1,
+    net = fc('fully_connected2', input=net, activation=selu, n_in=512, n_out=256, stddev=0.04, bias_init=0.1,
                  weight_decay=0.004)
     net = dropout_selu(net, dropout_prob_f,training=is_training)
 
-    weights = _variable_with_weight_decay('weights', [128, 40], stddev=1 / 128.0, activation="selu", wd=0.0)
+    weights = _variable_with_weight_decay('weights', [256, 40], stddev=1 / 128.0, activation="selu", wd=0.0)
     biases = tf.get_variable(name='biases', shape=[40], initializer=tf.constant_initializer(0.0), dtype=tf.float32)
     net = tf.add(tf.matmul(net, weights), biases, name='output')
        
@@ -233,6 +212,15 @@ def conv2d(scope_name, input, activation, ksize, f_in, f_out, bias_init=0.0, std
         biases = tf.get_variable('biases', [f_out], initializer=tf.constant_initializer(bias_init), dtype=tf.float32)
         pre_activation = tf.nn.bias_add(conv, biases)
         return activation(pre_activation, name=scope.name)
+
+def conv2d_non(scope_name, input, activation, ksize, f_in, f_out, bias_init=0.0, stddev=5e-2):
+    with tf.variable_scope(scope_name) as scope:
+        kernel = _variable_with_weight_decay('weights', shape=[ksize, ksize, f_in, f_out], activation=activation,
+                                             stddev=stddev)
+        conv = tf.nn.conv2d(input, kernel, [1, 1, 1, 1], padding='SAME')
+        biases = tf.get_variable('biases', [f_out], initializer=tf.constant_initializer(bias_init), dtype=tf.float32)
+        pre_activation = tf.nn.bias_add(conv, biases)
+        return pre_activation
 
 
 def fc(scope_name, input, activation, n_in, n_out, stddev=0.04, bias_init=0.0, weight_decay=None):
